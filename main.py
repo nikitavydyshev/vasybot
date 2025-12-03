@@ -2,9 +2,8 @@ from fastapi import FastAPI, Request
 import requests
 import hashlib
 import base64
-
-# Загружаем конфиг
-import config
+import json
+import config  # импорт конфигураций
 
 app = FastAPI()
 
@@ -40,18 +39,24 @@ def create_click_invoice(user_id: str, amount: int):
         "sign": sign
     }
 
+    # merchant_user_id нужен не во всех сервисах
     if config.CLICK_MERCHANT_USER_ID:
         payload["merchant_user_id"] = config.CLICK_MERCHANT_USER_ID
+
+    print("\n=== CLICK REQUEST PAYLOAD ===")
+    print(json.dumps(payload, indent=4, ensure_ascii=False))
 
     resp = requests.post("https://api.click.uz/v2/invoice/create", json=payload)
     data = resp.json()
 
-    print("CLICK RESPONSE:", data)
+    print("\n=== CLICK RESPONSE ===")
+    print(json.dumps(data, indent=4, ensure_ascii=False))
+
     return data
 
 
 # ======================================================
-# Подготовка BotHelp авторизации
+# Подготовка авторизации BotHelp
 # ======================================================
 basic_token = base64.b64encode(
     f"{config.BOTHELP_ID}:{config.BOTHELP_SECRET}".encode()
@@ -66,54 +71,74 @@ BOTHELP_SEND_URL = "https://main.bothelp.io/botX/sendMessage"
 
 
 # ======================================================
-# Обработка сообщений BotHelp
+# Вебхук от BotHelp
 # ======================================================
 @app.post("/bothelp")
 async def bothelp_webhook(request: Request):
     body = await request.json()
-    print("BOTHELP INPUT:", body)
 
-    user_id = body["from"]["id"]
-    text = body.get("text", "").lower()
+    print("\n\n======================= BOTHELP INPUT =======================")
+    print(json.dumps(body, indent=4, ensure_ascii=False))
 
-    if config.CODE_WORD in text:
+    # гарантированно проверяем наличие ключей
+    user_id = body.get("client_id")
+    text = body.get("text", "")
+
+    if not user_id:
+        print("❌ ERROR: BotHelp не передал client_id")
+        return {"error": "no_client_id"}
+
+    text_lower = text.lower()
+
+    # если пользователь написал кодовое слово
+    if config.CODE_WORD in text_lower:
         invoice = create_click_invoice(user_id, config.PAY_AMOUNT)
 
         if "payment_url" not in invoice:
-            print("CLICK ERROR:", invoice)
+            print("❌ ERROR: Click не выдал payment_url")
             return {"error": "click_failed", "details": invoice}
+
+        # отправляем ссылку пользователю
+        message = f"Отлично! Вот ваша ссылка на оплату:\n{invoice['payment_url']}"
+
+        print("\n=== BOTHELP SEND MESSAGE (payment link) ===")
+        print(message)
 
         requests.post(
             BOTHELP_SEND_URL,
             headers=BOTHELP_HEADERS,
-            json={
-                "user_id": user_id,
-                "message": f"Вот ваша ссылка на оплату:\n{invoice['payment_url']}"
-            }
+            json={"user_id": user_id, "message": message}
         )
 
     return {"status": "ok"}
 
 
 # ======================================================
-# Обработка callback Click
+# Вебхук Click (оплата)
 # ======================================================
 @app.post("/click")
 async def click_callback(request: Request):
     data = await request.json()
-    print("CLICK CALLBACK:", data)
 
-    # успешный платеж
+    print("\n\n======================= CLICK CALLBACK =======================")
+    print(json.dumps(data, indent=4, ensure_ascii=False))
+
+    # Проверяем успешность
     if data.get("error") == "0" or data.get("status") == "success":
         user_id = data["transaction_param"]
+
+        message = f"Спасибо за оплату! Вот ваш файл:\n{config.GOOGLE_FILE_URL}"
+
+        print("\n=== BOTHELP SEND MESSAGE (file delivery) ===")
+        print(message)
 
         requests.post(
             BOTHELP_SEND_URL,
             headers=BOTHELP_HEADERS,
-            json={
-                "user_id": user_id,
-                "message": f"Оплата прошла успешно! Вот ваш файл:\n{config.GOOGLE_FILE_URL}"
-            }
+            json={"user_id": user_id, "message": message}
         )
+
+    else:
+        print("❌ CLICK CALLBACK ERROR:", data)
 
     return {"status": "received"}
