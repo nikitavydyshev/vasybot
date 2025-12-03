@@ -35,18 +35,19 @@ async def bothelp_webhook(data: dict):
             "return_url": "https://google.com"
         }
     ).json()
-
+    print("CLICK RESPONSE:", invoice)
     # возвращаем BotHelp текст + кнопку
     return {
-        "message": "Прекрасно! Вот ваша ссылка на оплату:",
+    "message": {
+        "text": "Прекрасно! Вот ваша ссылка на оплату!",
         "buttons": [
             {
                 "text": "Оплатить",
-                #"url": invoice["payment_url"]
-                "url": invoice.get("payment_url", "https://google.com")  # временно
+                "url": invoice.get("payment_url", "https://google.com")
             }
         ]
     }
+}
 
 
 # 2) CALLBACK ОТ CLICK
@@ -82,5 +83,6 @@ async def click_callback(request: Request):
     )
 
     return {"status": "ok"}
+
 
 
