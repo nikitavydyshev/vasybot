@@ -81,7 +81,7 @@ async def bothelp_webhook(request: Request):
     print(json.dumps(body, indent=4, ensure_ascii=False))
 
     # гарантированно проверяем наличие ключей
-    user_id = body.get("client_id")
+    user_id = body.get("name")
     text = body.get("text", "")
 
     if not user_id:
@@ -142,3 +142,4 @@ async def click_callback(request: Request):
         print("❌ CLICK CALLBACK ERROR:", data)
 
     return {"status": "received"}
+
