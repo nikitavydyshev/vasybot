@@ -3,13 +3,13 @@ import requests
 import hashlib
 import base64
 import json
-import config  # импорт конфигураций
+import config
 
 app = FastAPI()
 
 
 # ======================================================
-# Генерация подписи Click
+# SIGN for Click
 # ======================================================
 def generate_sign(service_id, merchant_id, transaction_param, amount, secret_key):
     raw = f"{service_id}{merchant_id}{transaction_param}{amount}{secret_key}"
@@ -17,15 +17,13 @@ def generate_sign(service_id, merchant_id, transaction_param, amount, secret_key
 
 
 # ======================================================
-# Создание инвойса Click
+# Create Click Invoice
 # ======================================================
-def create_click_invoice(user_id: str, amount: int):
-    transaction_param = user_id
-
+def create_invoice(user_id: str, amount: int):
     sign = generate_sign(
         config.CLICK_SERVICE_ID,
         config.CLICK_MERCHANT_ID,
-        transaction_param,
+        user_id,
         amount,
         config.CLICK_SECRET_KEY
     )
@@ -33,80 +31,64 @@ def create_click_invoice(user_id: str, amount: int):
     payload = {
         "service_id": config.CLICK_SERVICE_ID,
         "merchant_id": config.CLICK_MERCHANT_ID,
-        "transaction_param": transaction_param,
+        "transaction_param": user_id,
         "amount": amount,
         "callback_url": f"{config.DOMAIN}/click",
         "sign": sign
     }
 
-    # merchant_user_id нужен не во всех сервисах
     if config.CLICK_MERCHANT_USER_ID:
         payload["merchant_user_id"] = config.CLICK_MERCHANT_USER_ID
 
-    print("\n=== CLICK REQUEST PAYLOAD ===")
-    print(json.dumps(payload, indent=4, ensure_ascii=False))
-
+    print("\nCLICK REQUEST:", payload)
     resp = requests.post("https://api.click.uz/v2/invoice/create", json=payload)
-    data = resp.json()
+    print("CLICK RESPONSE:", resp.text)
 
-    print("\n=== CLICK RESPONSE ===")
-    print(json.dumps(data, indent=4, ensure_ascii=False))
-
-    return data
+    return resp.json()
 
 
 # ======================================================
-# Подготовка авторизации BotHelp
+# BotHelp Auth
 # ======================================================
-basic_token = base64.b64encode(
-    f"{config.BOTHELP_ID}:{config.BOTHELP_SECRET}".encode()
-).decode()
+basic = base64.b64encode(f"{config.BOTHELP_ID}:{config.BOTHELP_SECRET}".encode()).decode()
 
-BOTHELP_HEADERS = {
-    "Authorization": f"Basic {basic_token}",
+HEADERS = {
+    "Authorization": f"Basic {basic}",
     "Content-Type": "application/json"
 }
 
-BOTHELP_SEND_URL = "https://main.bothelp.io/botX/sendMessage"
+SEND_URL = "https://main.bothelp.io/botX/sendMessage"
 
 
 # ======================================================
-# Вебхук от BotHelp
+# Webhook BotHelp
 # ======================================================
 @app.post("/bothelp")
-async def bothelp_webhook(request: Request):
+async def bothelp(request: Request):
     body = await request.json()
-
-    print("\n\n======================= BOTHELP INPUT =======================")
+    print("\n=== BOTHELP INPUT ===")
     print(json.dumps(body, indent=4, ensure_ascii=False))
 
-    # гарантированно проверяем наличие ключей
-    user_id = body.get("name")
-    text = body.get("text", "")
+    # универсальная обработка webhook
+    user_id = body.get("user_id") or body.get("client_id")
+    text = body.get("message") or body.get("text") or ""
 
     if not user_id:
-        print("❌ ERROR: BotHelp не передал client_id")
-        return {"error": "no_client_id"}
+        print("NO USER_ID! Cannot process")
+        return {"status": "error", "reason": "no user_id"}
 
-    text_lower = text.lower()
-
-    # если пользователь написал кодовое слово
-    if config.CODE_WORD in text_lower:
-        invoice = create_click_invoice(user_id, config.PAY_AMOUNT)
+    # обработка кодового слова
+    if config.CODE_WORD in text.lower():
+        invoice = create_invoice(user_id, config.PAY_AMOUNT)
 
         if "payment_url" not in invoice:
-            print("❌ ERROR: Click не выдал payment_url")
-            return {"error": "click_failed", "details": invoice}
+            return {"error": "no payment_url", "details": invoice}
 
-        # отправляем ссылку пользователю
-        message = f"Отлично! Вот ваша ссылка на оплату:\n{invoice['payment_url']}"
-
-        print("\n=== BOTHELP SEND MESSAGE (payment link) ===")
-        print(message)
+        message = f"Вот ваша ссылка на оплату:\n{invoice['payment_url']}"
 
         requests.post(
-            BOTHELP_SEND_URL,
-            headers=BOTHELP_HEADERS,
+            SEND_URL,
+            headers=HEADERS,
             json={"user_id": user_id, "message": message}
         )
 
@@ -114,32 +96,23 @@ async def bothelp_webhook(request: Request):
 
 
 # ======================================================
-# Вебхук Click (оплата)
+# Click Callback
 # ======================================================
 @app.post("/click")
 async def click_callback(request: Request):
     data = await request.json()
+    print("\nCLICK CALLBACK:", data)
 
-    print("\n\n======================= CLICK CALLBACK =======================")
-    print(json.dumps(data, indent=4, ensure_ascii=False))
-
-    # Проверяем успешность
     if data.get("error") == "0" or data.get("status") == "success":
         user_id = data["transaction_param"]
 
-        message = f"Спасибо за оплату! Вот ваш файл:\n{config.GOOGLE_FILE_URL}"
-
-        print("\n=== BOTHELP SEND MESSAGE (file delivery) ===")
-        print(message)
-
         requests.post(
-            BOTHELP_SEND_URL,
-            headers=BOTHELP_HEADERS,
-            json={"user_id": user_id, "message": message}
+            SEND_URL,
+            headers=HEADERS,
+            json={
+                "user_id": user_id,
+                "message": f"Спасибо за оплату! Вот файл:\n{config.GOOGLE_FILE_URL}"
+            }
         )
 
-    else:
-        print("❌ CLICK CALLBACK ERROR:", data)
-
     return {"status": "received"}
-
