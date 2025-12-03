@@ -14,7 +14,7 @@ BOTHELP_CLIENT_SECRET = "574704:39fdd14df52f1e5eed9d983d310f1cc4"
 
 FILE_URL = "https://drive.google.com/drive/folders/1XJNg1A8fJCjkUOyoDobndS9HumV023yb"
 
-SERVER_URL = "<<< URL_ТВОЕГО_СЕРВЕРА >>>"  # без слэша в конце
+SERVER_URL = "https://vasybot.onrender.com"  # без слэша в конце
 # ------------------------------------
 
 
@@ -81,3 +81,4 @@ async def click_callback(request: Request):
     )
 
     return {"status": "ok"}
+
