@@ -42,7 +42,8 @@ async def bothelp_webhook(data: dict):
         "buttons": [
             {
                 "text": "Оплатить",
-                "url": invoice["payment_url"]
+                #"url": invoice["payment_url"]
+                "url": invoice.get("payment_url", "https://google.com")  # временно
             }
         ]
     }
@@ -81,4 +82,5 @@ async def click_callback(request: Request):
     )
 
     return {"status": "ok"}
+
 
