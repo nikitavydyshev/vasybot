@@ -60,6 +60,16 @@ HEADERS = {
 
 SEND_URL = "https://main.bothelp.io/botX/sendMessage"
 
+@app.post("/instagram")
+async def instagram_webhook(request: Request):
+    data = await request.json()
+
+    print("\n===== INCOMING INSTAGRAM WEBHOOK =====")
+    print(data)
+    print("=======================================\n")
+
+    return {"status": "ok"}
+
 @app.get("/instagram")
 async def verify(request: Request):
     mode = request.query_params.get("hub.mode")
@@ -128,4 +138,5 @@ async def click_callback(request: Request):
         )
 
     return {"status": "received"}
+
 
