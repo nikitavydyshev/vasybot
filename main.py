@@ -9,7 +9,7 @@ def create_invoice_endpoint(data: dict):
     print("🔥 /create_invoice CALLED")
     print("DATA:", data)
 
-    user_id = data.get("bothelp_user_id")
+    user_id = data.get("user_id")
     amount = data.get("amount")
 
     if not user_id or not amount:
@@ -27,3 +27,4 @@ def check_payment(invoice_id: str):
     print("🔥 /check_payment CALLED")
     result = check_invoice_status(invoice_id)
     return result
+
