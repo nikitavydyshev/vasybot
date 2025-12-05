@@ -1,77 +1,50 @@
+import requests
 import hashlib
 import time
-import requests
-from config import (
-    CLICK_MERCHANT_ID,
-    CLICK_SERVICE_ID,
-    CLICK_MERCHANT_USER_ID,
-    CLICK_SECRET_KEY,
-    CLICK_BASE_URL
-)
+import config
 
-def make_auth_headers():
+
+def make_auth_header():
+    """
+    CLICK Auth header: merchant_user_id : sha1(timestamp + secret_key) : timestamp
+    """
     timestamp = str(int(time.time()))
+    digest_raw = timestamp + config.CLICK_SECRET_KEY
+    digest = hashlib.sha1(digest_raw.encode()).hexdigest()
 
-    raw = timestamp + CLICK_SECRET_KEY
-    digest = hashlib.sha1(raw.encode()).hexdigest()
-
-    auth = f"{CLICK_MERCHANT_USER_ID}:{digest}:{timestamp}"
-
-    print("\n===== AUTH DEBUG =====")
-    print("timestamp:", timestamp)
-    print("digest_raw:", raw)
-    print("digest:", digest)
-    print("auth header:", auth)
-    print("======================\n")
+    auth_header = f"{config.CLICK_MERCHANT_USER_ID}:{digest}:{timestamp}"
 
     return {
-        "Auth": auth,
+        "Auth": auth_header,
         "Accept": "application/json",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
 
-def create_invoice(amount, transaction_param):
-    url = f"{CLICK_BASE_URL}/v2/merchant/invoice/create/"
+def check_payment_status_by_mti(mti: str):
+    """
+    Проверка оплаты по MTI (transaction_param)
+    Использует CLICK endpoint:
+    GET /v2/merchant/payment/status/:service_id/:merchant_trans_id
+    """
+    url = (
+        f"https://api.click.uz/v2/merchant/payment/status/"
+        f"{config.CLICK_SERVICE_ID}/{mti}"
+    )
 
-    payload = {
-        "service_id": CLICK_SERVICE_ID,
-        "merchant_id": CLICK_MERCHANT_ID,
-        "amount": amount,
-        "transaction_param": transaction_param
-    }
+    headers = make_auth_header()
 
-    headers = make_auth_headers()
-
-    print("\n===== CREATE INVOICE DEBUG =====")
-    print("URL:", url)
-    print("PAYLOAD:", payload)
-    print("HEADERS:", headers)
-
-    response = requests.post(url, json=payload, headers=headers)
-    print("CLICK RESPONSE:", response.text)
-    print("=================================\n")
-
-    try:
-        return response.json()
-    except:
-        return {"error": "click_invalid_json", "raw": response.text}
-
-
-def check_invoice_status(invoice_id):
-    url = f"{CLICK_BASE_URL}/v2/merchant/invoice/status/{CLICK_SERVICE_ID}/{invoice_id}"
-
-    headers = make_auth_headers()
-
-    print("\n===== CHECK STATUS DEBUG =====")
+    print("\n===== CHECK PAYMENT REQUEST =====")
     print("URL:", url)
     print("HEADERS:", headers)
-
-    response = requests.get(url, headers=headers)
-    print("CLICK RESPONSE:", response.text)
-    print("=================================\n")
+    print("=================================")
 
     try:
+        response = requests.get(url, headers=headers)
+        print("CLICK RESPONSE:", response.text)
+        print("=================================\n")
+
         return response.json()
-    except:
-        return {"error": "click_invalid_json", "raw": response.text}
+
+    except Exception as e:
+        return {"error": "request_failed", "details": str(e)}
