@@ -1,142 +1,96 @@
 from fastapi import FastAPI, Request
 import requests
 import hashlib
-import base64
-import json
-import config
+import time
+
+from config import (
+    CLICK_SERVICE_ID,
+    CLICK_MERCHANT_ID,
+    CLICK_MERCHANT_USER_ID,
+    CLICK_SECRET_KEY,
+    CLICK_BASE_URL
+)
 
 app = FastAPI()
 
-VERIFY_TOKEN = "my_verify_token"
 
-# ======================================================
-# SIGN for Click
-# ======================================================
-def generate_sign(service_id, merchant_id, transaction_param, amount, secret_key):
-    raw = f"{service_id}{merchant_id}{transaction_param}{amount}{secret_key}"
-    return hashlib.sha256(raw.encode()).hexdigest()
+def make_auth_header():
+    timestamp = str(int(time.time()))
+    digest_raw = timestamp + CLICK_SECRET_KEY
+    digest = hashlib.sha1(digest_raw.encode()).hexdigest()
+
+    auth_value = f"{CLICK_MERCHANT_USER_ID}:{digest}:{timestamp}"
+
+    return {"Auth": auth_value}
 
 
-# ======================================================
-# Create Click Invoice
-# ======================================================
-def create_invoice(user_id: str, amount: int):
-    sign = generate_sign(
-        config.CLICK_SERVICE_ID,
-        config.CLICK_MERCHANT_ID,
-        user_id,
-        amount,
-        config.CLICK_SECRET_KEY
-    )
+@app.post("/create_invoice")
+async def create_invoice(request: Request):
+    body = await request.json()
+
+    user_id = body.get("user_id")
+    amount = body.get("amount")
+
+    if not user_id or not amount:
+        return {"error": "Missing user_id or amount"}
+
+    url = f"{CLICK_BASE_URL}/v2/merchant/invoice/create"
 
     payload = {
-        "service_id": config.CLICK_SERVICE_ID,
-        "merchant_id": config.CLICK_MERCHANT_ID,
-        "transaction_param": user_id,
+        "service_id": CLICK_SERVICE_ID,
+        "merchant_id": CLICK_MERCHANT_ID,
         "amount": amount,
-        "callback_url": f"{config.DOMAIN}/click",
-        "sign": sign
+        "transaction_param": user_id
     }
 
-    if config.CLICK_MERCHANT_USER_ID:
-        payload["merchant_user_id"] = config.CLICK_MERCHANT_USER_ID
+    headers = make_auth_header()
 
-    print("\nCLICK REQUEST:", payload)
-    resp = requests.post("https://api.click.uz/v2/invoice/create", json=payload)
-    print("CLICK RESPONSE:", resp.text)
+    print("\n📤 CREATE INVOICE → CLICK")
+    print("Headers:", headers)
+    print("Payload:", payload)
 
-    return resp.json()
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        print("📥 CLICK RESPONSE:", response.text)
+        data = response.json()
+    except Exception as e:
+        print("❌ Ошибка CLICK:", e)
+        return {"error": "click_error"}
 
+    # CLICK success?
+    invoice_id = data.get("invoice_id")
+    payment_url = data.get("payment_url")
 
-# ======================================================
-# BotHelp Auth
-# ======================================================
-basic = base64.b64encode(f"{config.BOTHELP_ID}:{config.BOTHELP_SECRET}".encode()).decode()
+    if not invoice_id:
+        return {"error": "invoice_create_failed", "details": data}
 
-HEADERS = {
-    "Authorization": f"Basic {basic}",
-    "Content-Type": "application/json"
-}
-
-SEND_URL = "https://main.bothelp.io/botX/sendMessage"
-
-@app.post("/instagram")
-async def instagram_webhook(request: Request):
-    data = await request.json()
-
-    print("\n===== INCOMING INSTAGRAM WEBHOOK =====")
-    print(data)
-    print("=======================================\n")
-
-    return {"status": "ok"}
-
-@app.get("/instagram")
-async def verify(request: Request):
-    mode = request.query_params.get("hub.mode")
-    token = request.query_params.get("hub.verify_token")
-    challenge = request.query_params.get("hub.challenge")
-
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        return int(challenge)
-
-    return {"status": "verification_failed"}
+    return {
+        "invoice_id": invoice_id,
+        "payment_url": payment_url
+    }
 
 
-# ======================================================
-# Webhook BotHelp
-# ======================================================
-@app.post("/bothelp")
-async def bothelp(request: Request):
-    body = await request.json()
-    print("\n=== BOTHELP INPUT ===")
-    print(json.dumps(body, indent=4, ensure_ascii=False))
+@app.get("/check_invoice")
+def check_invoice(invoice_id: int):
 
-    # универсальная обработка webhook
-    user_id = body.get("user_id") or body.get("client_id")
-    text = body.get("message") or body.get("text") or ""
+    url = f"{CLICK_BASE_URL}/v2/merchant/invoice/status/{CLICK_SERVICE_ID}/{invoice_id}"
 
-    if not user_id:
-        print("NO USER_ID! Cannot process")
-        return {"status": "error", "reason": "no user_id"}
+    headers = make_auth_header()
 
-    # обработка кодового слова
-    if config.CODE_WORD in text.lower():
-        invoice = create_invoice(user_id, config.PAY_AMOUNT)
+    print("\n🔎 CHECK INVOICE STATUS → CLICK")
+    print("Headers:", headers)
 
-        if "payment_url" not in invoice:
-            return {"error": "no payment_url", "details": invoice}
+    try:
+        response = requests.get(url, headers=headers)
+        print("📥 CLICK RESPONSE:", response.text)
+        data = response.json()
+    except Exception as e:
+        print("❌ Ошибка CLICK:", e)
+        return {"paid": False}
 
-        message = f"Вот ваша ссылка на оплату:\n{invoice['payment_url']}"
+    status = data.get("invoice_status")
 
-        requests.post(
-            SEND_URL,
-            headers=HEADERS,
-            json={"user_id": user_id, "message": message}
-        )
+    if status == 2:
+        return {"paid": True}
 
-    return {"status": "ok"}
-
-
-# ======================================================
-# Click Callback
-# ======================================================
-@app.post("/click")
-async def click_callback(request: Request):
-    data = await request.json()
-    print("\nCLICK CALLBACK:", data)
-
-    if data.get("error") == "0" or data.get("status") == "success":
-        user_id = data["transaction_param"]
-
-        requests.post(
-            SEND_URL,
-            headers=HEADERS,
-            json={
-                "user_id": user_id,
-                "message": f"Спасибо за оплату! Вот файл:\n{config.GOOGLE_FILE_URL}"
-            }
-        )
-
-    return {"status": "received"}
-
-
+    return {"paid": False}
