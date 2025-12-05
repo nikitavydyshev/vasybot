@@ -21,7 +21,18 @@ def make_auth_header():
 
     auth_value = f"{CLICK_MERCHANT_USER_ID}:{digest}:{timestamp}"
 
-    return {"Auth": auth_value}
+    print("\n===== AUTH DEBUG =====")
+    print("timestamp:", timestamp)
+    print("digest_raw:", digest_raw)
+    print("digest:", digest)
+    print("Auth header:", auth_value)
+    print("======================\n")
+
+    return {
+        "Auth": auth_value,
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
 
 
 @app.post("/create_invoice")
@@ -46,7 +57,6 @@ async def create_invoice(request: Request):
     headers = make_auth_header()
 
     print("\n📤 CREATE INVOICE → CLICK")
-    print("Headers:", headers)
     print("Payload:", payload)
 
     try:
@@ -54,43 +64,36 @@ async def create_invoice(request: Request):
         print("📥 CLICK RESPONSE:", response.text)
         data = response.json()
     except Exception as e:
-        print("❌ Ошибка CLICK:", e)
+        print("❌ CLICK ERROR:", e)
         return {"error": "click_error"}
 
-    # CLICK success?
-    invoice_id = data.get("invoice_id")
-    payment_url = data.get("payment_url")
-
-    if not invoice_id:
+    if "invoice_id" not in data:
         return {"error": "invoice_create_failed", "details": data}
 
     return {
-        "invoice_id": invoice_id,
-        "payment_url": payment_url
+        "invoice_id": data["invoice_id"],
+        "payment_url": data["payment_url"]
     }
 
 
 @app.get("/check_invoice")
 def check_invoice(invoice_id: int):
-
     url = f"{CLICK_BASE_URL}/v2/merchant/invoice/status/{CLICK_SERVICE_ID}/{invoice_id}"
 
     headers = make_auth_header()
 
     print("\n🔎 CHECK INVOICE STATUS → CLICK")
-    print("Headers:", headers)
 
+    # ВНИМАНИЕ: используем POST вместо GET
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.post(url, json={}, headers=headers)
         print("📥 CLICK RESPONSE:", response.text)
         data = response.json()
     except Exception as e:
-        print("❌ Ошибка CLICK:", e)
+        print("❌ CLICK ERROR:", e)
         return {"paid": False}
 
-    status = data.get("invoice_status")
-
-    if status == 2:
+    if data.get("invoice_status") == 2:
         return {"paid": True}
 
     return {"paid": False}
