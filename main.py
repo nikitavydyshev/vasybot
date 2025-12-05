@@ -1,30 +1,52 @@
+from fastapi import FastAPI, Request
 import time
-from fastapi import FastAPI
-from click_api import create_invoice, check_invoice_status
+import config
+from click_api import check_payment_status_by_mti
 
 app = FastAPI()
 
 @app.post("/create_invoice")
-def create_invoice_endpoint(data: dict):
-    print("🔥 /create_invoice CALLED")
-    print("DATA:", data)
+async def create_invoice(request: Request):
+    data = await request.json()
+    print("🔥 /create_invoice DATA:", data)
 
-    user_id = data.get("user_id")
-    amount = data.get("amount")
+    user_id = str(data.get("bothelp_user_id") or data.get("user_id"))
+    amount = int(data.get("amount", config.GUIDE_PRICE))
 
-    if not user_id or not amount:
-        return {"error": "missing_parameters"}
+    if not user_id:
+        return {"error": "missing_user_id"}
 
-    transaction_param = f"{user_id}-{int(time.time())}"
+    timestamp = int(time.time())
+    transaction_param = f"{user_id}-{timestamp}"
 
-    result = create_invoice(amount, transaction_param)
+    payment_link = (
+        f"https://my.click.uz/services/pay?"
+        f"service_id={config.CLICK_SERVICE_ID}"
+        f"&merchant_id={config.CLICK_MERCHANT_ID}"
+        f"&amount={amount}"
+        f"&transaction_param={transaction_param}"
+    )
 
-    return result
+    return {
+        "status": "ok",
+        "payment_link": payment_link,
+        "mti": transaction_param
+    }
 
 
 @app.get("/check_payment")
-def check_payment(invoice_id: str):
-    print("🔥 /check_payment CALLED")
-    result = check_invoice_status(invoice_id)
-    return result
+async def check_payment(mti: str):
+    print("🔍 CHECK PAYMENT MTI:", mti)
 
+    result = check_payment_status_by_mti(mti)
+
+    # Успешные статусы
+    if (
+        result.get("payment_status") == 1 or
+        result.get("transaction_state") == 2 or
+        (result.get("status") or "").lower() == "confirmed" or
+        "успешно" in (result.get("error_note") or "").lower()
+    ):
+        return {"status": "paid"}
+
+    return {"status": "not_paid", "details": result}
