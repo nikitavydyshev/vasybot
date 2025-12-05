@@ -8,3 +8,5 @@ CLICK_MERCHANT_USER_ID = "69637"   # если не нужен — оставь "
 
 CLICK_BASE_URL = "https://api.click.uz"
 
+GUIDE_PRICE = 1000
+
