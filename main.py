@@ -5,10 +5,15 @@ from click_api import check_payment_status_by_mti
 
 app = FastAPI()
 
+
 @app.post("/create_invoice")
 async def create_invoice(request: Request):
+    """
+    Получаем user_id и amount от BotHelp
+    Генерируем ссылку на оплату (Simple Checkout)
+    """
     data = await request.json()
-    print("🔥 /create_invoice DATA:", data)
+    print("🔥 CREATE INVOICE DATA:", data)
 
     user_id = str(data.get("bothelp_user_id") or data.get("user_id"))
     amount = int(data.get("amount", config.GUIDE_PRICE))
@@ -17,6 +22,7 @@ async def create_invoice(request: Request):
         return {"error": "missing_user_id"}
 
     timestamp = int(time.time())
+
     transaction_param = f"{user_id}-{timestamp}"
 
     payment_link = (
@@ -30,22 +36,25 @@ async def create_invoice(request: Request):
     return {
         "status": "ok",
         "payment_link": payment_link,
-        "mti": transaction_param
+        "mti": transaction_param,
     }
 
 
 @app.get("/check_payment")
 async def check_payment(mti: str):
+    """
+    Проверка оплаты по MTI (transaction_param)
+    """
     print("🔍 CHECK PAYMENT MTI:", mti)
 
     result = check_payment_status_by_mti(mti)
 
     # Успешные статусы
     if (
-        result.get("payment_status") == 1 or
-        result.get("transaction_state") == 2 or
-        (result.get("status") or "").lower() == "confirmed" or
-        "успешно" in (result.get("error_note") or "").lower()
+        result.get("payment_status") == 1
+        or result.get("transaction_state") == 2
+        or (result.get("status") or "").lower() == "confirmed"
+        or "успешно" in (result.get("error_note") or "").lower()
     ):
         return {"status": "paid"}
 
