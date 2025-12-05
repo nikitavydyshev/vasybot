@@ -36,6 +36,9 @@ def make_auth_header():
 
 
 @app.post("/create_invoice")
+def create_invoice(data: dict):
+    print("🔥🔥🔥 BOTHELP HIT THIS ENDPOINT 🔥🔥🔥")
+    return {"debug": "endpoint_reached"}
 async def create_invoice(request: Request):
     body = await request.json()
 
@@ -97,3 +100,4 @@ def check_invoice(invoice_id: int):
         return {"paid": True}
 
     return {"paid": False}
+
