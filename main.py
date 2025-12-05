@@ -1,3 +1,5 @@
+print("🚀 FASTAPI SERVER STARTED 🚀")
+
 from fastapi import FastAPI, Request
 import requests
 import hashlib
@@ -78,6 +80,9 @@ async def create_invoice(request: Request):
         "payment_url": data["payment_url"]
     }
 
+print("=================================")
+print("🚨 ENDPOINT CALLED!")
+print("=================================")
 
 @app.get("/check_invoice")
 def check_invoice(invoice_id: int):
@@ -100,5 +105,6 @@ def check_invoice(invoice_id: int):
         return {"paid": True}
 
     return {"paid": False}
+
 
 
