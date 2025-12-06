@@ -2,7 +2,7 @@ import requests
 import hashlib
 import time
 import config
-
+from datetime import datetime
 
 def make_auth_header():
     """
@@ -21,15 +21,17 @@ def make_auth_header():
     }
 
 
-def check_payment_status_by_mti(mti: str):
+def check_payment_status_by_mti(mti: str, date=None):
+    if date is None:
+        date = datetime.utcnow().strftime("%Y-%m-%d")
     """
     Проверка оплаты по MTI (transaction_param)
     Использует CLICK endpoint:
     GET /v2/merchant/payment/status/:service_id/:merchant_trans_id
     """
     url = (
-        f"https://api.click.uz/v2/merchant/payment/status/"
-        f"{config.CLICK_SERVICE_ID}/{mti}"
+        f"https://api.click.uz/v2/merchant/payment/status_by_mti/"
+        f"{config.CLICK_SERVICE_ID}/{mti}/{date}"
     )
 
     headers = make_auth_header()
