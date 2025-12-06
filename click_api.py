@@ -21,9 +21,8 @@ def make_auth_header():
     }
 
 
-def check_payment_status_by_mti(mti: str, date=None):
-    if date is None:
-        date = datetime.utcnow().strftime("%Y-%m-%d")
+def check_payment_status_by_mti(mti: str, time: str):
+    
     """
     Проверка оплаты по MTI (transaction_param)
     Использует CLICK endpoint:
@@ -31,7 +30,7 @@ def check_payment_status_by_mti(mti: str, date=None):
     """
     url = (
         f"https://api.click.uz/v2/merchant/payment/status_by_mti/"
-        f"{config.CLICK_SERVICE_ID}/{mti}/{date}"
+        f"{config.CLICK_SERVICE_ID}/{mti}/{time}"
     )
 
     headers = make_auth_header()
