@@ -42,13 +42,14 @@ def check_payment_status_by_mti(mti: str, date=None):
     print("=================================")
 
     
-    r = requests.get(url, headers=headers, timeout=10)
-    r.raise_for_status()
+    try:
+        response = requests.get(url, headers=headers)
         print("CLICK RESPONSE:", response.text)
         print("=================================\n")
 
-    return response.json()
+        return response.json()
 
     except Exception as e:
         return {"error": "request_failed", "details": str(e)}
+
 
