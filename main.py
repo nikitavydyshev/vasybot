@@ -37,6 +37,7 @@ async def create_invoice(request: Request):
         "status": "ok",
         "payment_link": payment_link,
         "mti": transaction_param,
+        "time": timestamp
     }
 
 
@@ -59,3 +60,4 @@ async def check_payment(mti: str):
         return {"status": "paid"}
 
     return {"status": "not_paid", "details": result}
+
