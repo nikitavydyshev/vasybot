@@ -42,13 +42,13 @@ async def create_invoice(request: Request):
 
 
 @app.get("/check_payment")
-async def check_payment(mti: str):
+async def check_payment(mti: str, time: str):
     """
     Проверка оплаты по MTI (transaction_param)
     """
-    print("🔍 CHECK PAYMENT MTI:", mti)
+    print("🔍 CHECK PAYMENT MTI:", mti, time)
 
-    result = check_payment_status_by_mti(mti)
+    result = check_payment_status_by_mti(mti, time)
 
     # Успешные статусы
     if (
@@ -60,4 +60,5 @@ async def check_payment(mti: str):
         return {"status": "paid"}
 
     return {"status": "not_paid", "details": result}
+
 
